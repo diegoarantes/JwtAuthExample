@@ -1,57 +1,66 @@
 package com.chkcerto.labs.services.impl;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.exceptions.JWTCreationException;
+import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.chkcerto.labs.services.JWTService;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-
-import java.security.Key;
 import java.util.Date;
 import java.util.Map;
-import java.util.function.Function;
 
 @Service
 public class JWTServiceImpl implements JWTService {
 
+    private final String secret = "MY-JWT-SECRET";
+
     public String generateToken(UserDetails userDetails) {
-        return Jwts.builder()
-                .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 24)) // expiration in 1 day = 24 hours
-                .signWith(getSiginKey(), SignatureAlgorithm.HS256)
-                .compact();
+        Algorithm algorithm = Algorithm.HMAC256(secret); // Pode colocar a Secret em Variaveis do Ambiente
+
+        try {
+            return JWT.create()
+                    .withIssuer("examples-api") // Nome do Sistema
+                    .withAudience("AutoSCORE.API")
+                    .withSubject(userDetails.getUsername())
+                    .withExpiresAt(new Date(System.currentTimeMillis() + 1000 * 60 * 24)) // expiration in 1 day = 24 hours
+                    .sign(algorithm);
+
+        } catch (JWTCreationException exception) {
+            throw new RuntimeException("Error while generating token", exception);
+        }
     }
 
     public String generateRefreshToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        return Jwts.builder().setClaims(extraClaims)
-                .setSubject(userDetails.getUsername())
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 168)) // expiration in 7 day = 168 hours
-                .signWith(getSiginKey(), SignatureAlgorithm.HS256)
-                .compact();
+        Algorithm algorithm = Algorithm.HMAC256(secret); // Pode colocar a Secret em Variaveis do Ambiente
+
+        try {
+            return JWT.create()
+                    .withIssuer("examples-api") // Nome do Sistema
+                    .withAudience("AutoSCORE.API")
+                    .withSubject(userDetails.getUsername())
+                    .withExpiresAt(new Date(System.currentTimeMillis() + 1000 * 60 * 168)) // expiration in 1 day = 24 hours
+                    .sign(algorithm);
+
+        } catch (JWTCreationException exception) {
+            throw new RuntimeException("Error while generating token", exception);
+        }
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
-    }
+        Algorithm algorithm = Algorithm.HMAC256(secret);
 
+        try {
+            return JWT.require(algorithm)
+                    .withIssuer("examples-api")
+                    .withAudience("AutoSCORE.API")
+                    .build()
+                    .verify(token)
+                    .getSubject();
 
-    private <T> T extractClaim(String token, Function<Claims, T> claimsResolvers) {
-        final Claims claims = extractAllClaims(token);
-        return claimsResolvers.apply(claims);
-    }
-
-    private Key getSiginKey() {
-        byte[] key = Decoders.BASE64.decode("413F4428472B4B6250655368566D5970337336763979244226452948404D6351");
-        return Keys.hmacShaKeyFor(key);
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parser().setSigningKey(getSiginKey()).build().parseClaimsJws(token).getBody();
+        } catch (JWTVerificationException exception) {
+            return "";
+        }
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
@@ -60,7 +69,7 @@ public class JWTServiceImpl implements JWTService {
     }
 
     private boolean isTokenExpired(String token) {
-        return extractClaim(token, Claims::getExpiration).before(new Date());
+        return JWT.decode(token).getExpiresAt().before(new Date());
     }
 
 }
